@@ -1,19 +1,98 @@
 import { storage } from "./storage";
+import { CohereClient } from "cohere-ai";
+import { sendPushToAll } from "./push";
 
-async function embedTexts(_texts: string[], _type: string): Promise<number[][]> {
-  return [];
+// Initialize Cohere client if API key is available
+const cohereClient = process.env.COHERE_API_KEY 
+  ? new CohereClient({ token: process.env.COHERE_API_KEY })
+  : null;
+
+async function embedTexts(texts: string[], type: string): Promise<number[][]> {
+  if (!cohereClient || !process.env.COHERE_API_KEY) {
+    return [];
+  }
+  
+  try {
+    const response = await cohereClient.embed({
+      texts,
+      model: "embed-english-v3.0",
+      inputType: type as "search_document" | "search_query",
+    });
+    
+    return response.embeddings.map(embedding => Array.from(embedding));
+  } catch (error) {
+    console.error("Failed to embed texts:", error);
+    return [];
+  }
 }
 
-async function rerankDocuments(_query: string, _docs: string[], _topN: number): Promise<{ index: number; score: number }[]> {
-  return [];
+async function rerankDocuments(query: string, docs: string[], topN: number): Promise<{ index: number; score: number }[]> {
+  if (!cohereClient || !process.env.COHERE_API_KEY) {
+    return [];
+  }
+  
+  try {
+    const response = await cohereClient.rerank({
+      model: "rerank-english-v3.0",
+      query,
+      documents: docs.map(text => ({ text })),
+      topN,
+    });
+    
+    return response.results.map(result => ({
+      index: result.index,
+      score: result.relevanceScore,
+    }));
+  } catch (error) {
+    console.error("Failed to rerank documents:", error);
+    return [];
+  }
 }
 
-async function generateAlertMessage(_recall: any, _item: any): Promise<string> {
-  return "Potential recall match detected. Review the details.";
+async function generateAlertMessage(recall: any, item: any): Promise<string> {
+  if (!cohereClient || !process.env.COHERE_API_KEY) {
+    return "Potential recall match detected. Review the details.";
+  }
+  
+  try {
+    const prompt = `Generate a brief one-sentence alert message (under 40 words) for a user about a food recall. 
+The user has: ${item.brand || ''} ${item.productName}
+The recall is: ${recall.productDescription || recall.reason || 'Unknown product'}
+Focus on the key safety concern. Be clear and direct.`;
+    
+    const response = await cohereClient.chat({
+      model: "command-r-plus-08-2024",
+      message: prompt,
+    });
+    
+    return response.text || "Potential recall match detected. Review the details.";
+  } catch (error) {
+    console.error("Failed to generate alert message:", error);
+    return "Potential recall match detected. Review the details.";
+  }
 }
 
-async function generateProductAlertMessage(_recall: any, _product: any): Promise<string> {
-  return "Potential product recall match detected. Review the details.";
+async function generateProductAlertMessage(recall: any, product: any): Promise<string> {
+  if (!cohereClient || !process.env.COHERE_API_KEY) {
+    return "Potential product recall match detected. Review the details.";
+  }
+  
+  try {
+    const prompt = `Generate a brief one-sentence alert message (under 40 words) for a user about a product recall.
+The user has: ${product.brand || ''} ${product.productName} ${product.modelNumber || ''}
+The recall is: ${recall.productName || recall.description || 'Unknown product'} - ${recall.hazard || 'Safety concern'}
+Focus on the key safety hazard. Be clear and direct.`;
+    
+    const response = await cohereClient.chat({
+      model: "command-r-plus-08-2024",
+      message: prompt,
+    });
+    
+    return response.text || "Potential product recall match detected. Review the details.";
+  } catch (error) {
+    console.error("Failed to generate product alert message:", error);
+    return "Potential product recall match detected. Review the details.";
+  }
 }
 import type { PantryItem, Recall, InsertAlert, Product, ProductRecall, InsertProductAlert } from "@shared/schema";
 
@@ -297,6 +376,15 @@ class VectorStore {
           };
           
           await storage.createAlert(alert);
+          
+          // Send push notification
+          sendPushToAll({
+            title: '🥫 Food Recall Alert',
+            body: `${pantryItem.brand || ''} ${pantryItem.productName}: ${message}`.trim(),
+            tag: `food-alert-${pantryItem.id}-${recallId}`,
+            url: '/',
+            urgency,
+          }).catch(console.error);
         }
       }
     } catch (error) {
@@ -378,6 +466,15 @@ class VectorStore {
           };
           
           await storage.createProductAlert(alert);
+          
+          // Send push notification
+          sendPushToAll({
+            title: '📦 Product Recall Alert',
+            body: `${product.brand || ''} ${product.productName}: ${message}`.trim(),
+            tag: `product-alert-${product.id}-${recallId}`,
+            url: '/products',
+            urgency,
+          }).catch(console.error);
         }
       }
     } catch (error) {

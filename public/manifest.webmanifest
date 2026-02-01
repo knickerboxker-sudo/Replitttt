@@ -1,7 +1,7 @@
 {
-  "name": "sortir",
-  "short_name": "sortir",
-  "description": "Scan groceries and products to check for FDA food recalls",
+  "name": "RecallGuard",
+  "short_name": "RecallGuard",
+  "description": "Track food, vehicle, and product recalls for your items.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f0f0f",

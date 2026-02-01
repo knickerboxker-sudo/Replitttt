@@ -17,7 +17,7 @@ import {
   type UnifiedAlert
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, count } from "drizzle-orm";
 
 export interface IStorage {
   getPantryItems(): Promise<PantryItem[]>;
@@ -211,8 +211,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRecallCount(): Promise<number> {
-    const result = await db.select().from(recalls);
-    return result.length;
+    const [{ count: n }] = await db.select({ count: count() }).from(recalls);
+    return n;
   }
 
   async getVehicleRecalls(): Promise<VehicleRecall[]> {
@@ -247,8 +247,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getVehicleRecallCount(): Promise<number> {
-    const result = await db.select().from(vehicleRecalls);
-    return result.length;
+    const [{ count: n }] = await db.select({ count: count() }).from(vehicleRecalls);
+    return n;
   }
 
   async getProductRecalls(): Promise<ProductRecall[]> {
@@ -283,8 +283,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProductRecallCount(): Promise<number> {
-    const result = await db.select().from(productRecalls);
-    return result.length;
+    const [{ count: n }] = await db.select({ count: count() }).from(productRecalls);
+    return n;
   }
 
   async getAlerts(): Promise<Alert[]> {

@@ -1,4 +1,5 @@
-const CACHE_NAME = 'recallguard-v1';
+// client/public/sw.js
+const CACHE_NAME = 'recallguard-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.webmanifest',
@@ -7,60 +8,100 @@ const STATIC_ASSETS = [
   '/apple-touch-icon.png'
 ];
 
-// Install event - cache static assets
+// ─── INSTALL ─────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
 });
 
-// Activate event - clean old caches
+// ─── ACTIVATE ────────────────────────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    })
+    caches.keys().then((names) =>
+      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+    )
   );
   self.clients.claim();
 });
 
-// Fetch event - network first, fallback to cache
+// ─── FETCH ───────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
   if (event.request.method !== 'GET') return;
-
-  // Skip API requests
   if (event.request.url.includes('/api/')) return;
 
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Clone the response and cache it
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseClone);
-        });
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;
       })
-      .catch(() => {
-        // Fallback to cache
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          // Return offline page for navigation requests
-          if (event.request.mode === 'navigate') {
-            return caches.match('/');
-          }
+      .catch(() =>
+        caches.match(event.request).then((cached) => {
+          if (cached) return cached;
+          if (event.request.mode === 'navigate') return caches.match('/');
           return new Response('Offline', { status: 503 });
-        });
-      })
+        })
+      )
+  );
+});
+
+// ─── PUSH (server sends a push message → show a notification) ───────────────
+self.addEventListener('push', (event) => {
+  // Fallback if the server sends an empty payload
+  let payload = { title: 'RecallGuard Alert', body: 'A new recall may affect your items.' };
+
+  if (event.data) {
+    try {
+      payload = event.data.json();
+    } catch {
+      // If it's not JSON, treat as plain text body
+      payload.body = event.data.text();
+    }
+  }
+
+  const options = {
+    body: payload.body,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: payload.tag || 'recallguard-alert',         // collapses duplicate notifications
+    requireInteraction: payload.urgency === 'HIGH',  // keeps HIGH alerts visible until tapped
+    data: {
+      url: payload.url || '/',                        // where to open on tap
+      timestamp: Date.now()
+    },
+    actions: [
+      { action: 'view', title: 'View Alert' },
+      { action: 'dismiss', title: 'Dismiss' }
+    ]
+  };
+
+  event.waitUntil(self.registration.showNotification(payload.title, options));
+});
+
+// ─── NOTIFICATION CLICK (user taps the notification) ────────────────────────
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  // If the user tapped "Dismiss", do nothing else
+  if (event.action === 'dismiss') return;
+
+  const url = (event.notification.data && event.notification.data.url) || '/';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // If the app is already open, focus it and navigate
+      for (const client of clients) {
+        if (client.url && new URL(client.url).origin === self.location.origin) {
+          client.focus();
+          client.postMessage({ type: 'NOTIFICATION_CLICK', url });
+          return;
+        }
+      }
+      // Otherwise open a new window
+      return self.clients.openWindow(url);
+    })
   );
 });

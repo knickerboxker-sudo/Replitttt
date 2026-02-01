@@ -70,6 +70,8 @@ app.use((req, res, next) => {
   // Initialize vector store from database
   if (process.env.COHERE_API_KEY) {
     vectorStore.initialize().catch(console.error);
+  } else {
+    console.warn('[STARTUP] COHERE_API_KEY is not set — vector matching is disabled. Only keyword matching will run.');
   }
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
