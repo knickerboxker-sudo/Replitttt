@@ -1,9 +1,6 @@
 // client/src/hooks/usePushNotifications.ts
 import { useState, useEffect, useCallback } from 'react';
 
-// Paste your actual VAPID public key here after generating it (see Section 4).
-const VAPID_PUBLIC_KEY = 'YOUR_VAPID_PUBLIC_KEY_HERE';
-
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -20,6 +17,7 @@ export function usePushNotifications() {
   const [permission, setPermission] = useState<PermissionState>('default');
   const [subscribed, setSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [vapidPublicKey, setVapidPublicKey] = useState<string | null>(null);
 
   useEffect(() => {
     // Check browser support
@@ -33,10 +31,20 @@ export function usePushNotifications() {
         status.onchange = () => setPermission(status.state);
       });
     }
+    
+    // Fetch VAPID public key from server
+    fetch('/api/push/status')
+      .then(res => res.json())
+      .then(data => {
+        if (data.vapidPublicKey) {
+          setVapidPublicKey(data.vapidPublicKey);
+        }
+      })
+      .catch(err => console.error('Failed to fetch VAPID key:', err));
   }, []);
 
   const subscribe = useCallback(async () => {
-    if (!supported) return false;
+    if (!supported || !vapidPublicKey) return false;
     setLoading(true);
 
     try {
@@ -54,7 +62,7 @@ export function usePushNotifications() {
       // 3. Subscribe to push via the browser
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
       });
 
       // 4. Send the subscription object to the server
@@ -74,7 +82,7 @@ export function usePushNotifications() {
       setLoading(false);
       return false;
     }
-  }, [supported]);
+  }, [supported, vapidPublicKey]);
 
   const unsubscribe = useCallback(async () => {
     setLoading(true);

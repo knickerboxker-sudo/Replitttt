@@ -42,6 +42,7 @@ export async function registerRoutes(httpServer: HTTPServer, app: Express) {
     res.json({
       pushEnabled: true,
       vapidConfigured: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
+      vapidPublicKey: process.env.VAPID_PUBLIC_KEY || null,
     });
   });
   
