@@ -1,4 +1,5 @@
 // client/public/sw.js
+// Cache version - increment this when static assets change to invalidate old caches
 const CACHE_NAME = 'recallguard-v2';
 const STATIC_ASSETS = [
   '/',

@@ -14,11 +14,11 @@ export async function registerRoutes(httpServer: HTTPServer, app: Express) {
   // ─── PUSH NOTIFICATION ROUTES ────────────────────────────────────────────────
   app.post("/api/push/subscribe", async (req, res) => {
     try {
-      const { endpoint, keys } = req.body;
+      const { endpoint, keys, expirationTime } = req.body;
       if (!endpoint || !keys?.p256dh || !keys?.auth) {
         return res.status(400).json({ error: "Invalid subscription object" });
       }
-      saveSubscription(req.body);
+      saveSubscription({ endpoint, keys, expirationTime });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to save subscription" });

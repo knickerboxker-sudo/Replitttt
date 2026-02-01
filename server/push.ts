@@ -110,15 +110,22 @@ export async function sendPushToAll(payload: PushPayload): Promise<void> {
 
 async function sendPushToOne(sub: PushSubscriptionJSON, payload: PushPayload): Promise<void> {
   try {
+    // Convert to web-push PushSubscription format (types are compatible)
+    const subscription = {
+      endpoint: sub.endpoint,
+      expirationTime: sub.expirationTime ?? null,
+      keys: sub.keys,
+    };
+    
     await webPush.sendNotification(
-      sub as any,
+      subscription,
       JSON.stringify(payload),
       { urgency: payload.urgency === 'HIGH' ? 'high' : 'normal' }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Re-throw with statusCode property for cleanup logic
-    const error: any = new Error(`Push failed: ${err.message}`);
-    error.statusCode = err.statusCode;
+    const error = new Error(`Push failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    (error as any).statusCode = (err as any)?.statusCode;
     throw error;
   }
 }
